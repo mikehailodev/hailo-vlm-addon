@@ -1,7 +1,7 @@
-ARG BUILD_FROM=debian:bookworm-slim
-FROM ${BUILD_FROM}
+# Hardcode Debian base — the HA supervisor BUILD_FROM arg points to Alpine
+# which has no apt-get. We need Debian for HailoRT .deb/.whl packages.
+FROM debian:bookworm-slim
 
-# Use bash (Debian) — ensures apt-get works even if somehow Alpine sneaks in
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ─── System dependencies ─────────────────────────────────────────────────────
