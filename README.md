@@ -56,7 +56,8 @@ below to create your own Hailo-powered automations.
   `hailo10h-firmware` packages. Use the fork at:
   <https://github.com/mikehailodev/operating-system> (branch
   `feature/hailort-package`)
-- **HailoRT 5.2.0** (the add-on Dockerfile builds this automatically)
+- **HailoRT 5.2.0** — the pre-built `.deb` and Python `.whl` are bundled in
+  the add-on (no compilation needed)
 - A **VLM HEF model** file for Hailo-10H (see [VLM Model Setup](#vlm-model-setup))
 
 ### Verify Hardware on the Host
@@ -95,8 +96,8 @@ lspci -nn | grep 1e60
 
 1. The **Hailo-10H VLM Chat** add-on should now appear in the store
 2. Click it → **Install**
-3. Wait for the Docker image to build (first install may take 10–20 minutes
-   as it compiles HailoRT from source)
+3. Wait for the Docker image to build (first install takes a few minutes
+   to install the bundled HailoRT packages)
 
 ### 3. Configure & Start
 
@@ -428,18 +429,21 @@ your-addon/
 **1. Access the Hailo device:** In `config.yaml`, set `full_access: true` so
 the container can see `/dev/hailo0`. Also set `video: true` for camera access.
 
-**2. Build HailoRT in Dockerfile:** Use `build.yaml` to override the base
-image to Debian (Alpine doesn't work with HailoRT). Build from source:
+**2. Install HailoRT in Dockerfile:** Use `build.yaml` to override the base
+image to Debian (Alpine doesn't work with HailoRT). Install from pre-built
+packages (`.deb` + `.whl`) — download them from the
+[Hailo Developer Zone](https://hailo.ai/developer-zone/):
 
 ```dockerfile
-ARG HAILORT_VERSION=v5.2.0
-RUN git clone --depth 1 --branch ${HAILORT_VERSION} \
-      https://github.com/hailo-ai/hailort.git /tmp/hailort \
-    && cd /tmp/hailort \
-    && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build -j$(nproc) \
-    && cmake --install build && ldconfig \
-    && rm -rf /tmp/hailort
+# Place .deb and .whl in a packages/ directory next to the Dockerfile
+COPY packages/ /tmp/packages/
+RUN apt-get update \
+    && dpkg -i /tmp/packages/h10-hailort_5.2.0_arm64.deb \
+    || (apt-get install -f -y && dpkg -i /tmp/packages/h10-hailort_5.2.0_arm64.deb) \
+    && ldconfig && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --break-system-packages --no-cache-dir \
+    /tmp/packages/hailort-5.2.0-cp311-cp311-linux_aarch64.whl \
+    && rm -rf /tmp/packages
 ```
 
 **3. Read options:** Use `jq` in your `run.sh` to parse `/data/options.json`:
@@ -516,7 +520,7 @@ vlm = VLM(vdevice, "/path/to/model.hef")
 | "No camera" warning | `ls /dev/video*` on host | Plug in USB camera, set `video: true` |
 | VLM gives demo responses | Check for `.hef` file in `/media` | Download and place VLM HEF model |
 | Slow inference | Normal for first prompt | Subsequent prompts are faster; try lower `max_tokens` |
-| Build fails (timeout) | ARM compilation is slow | Increase add-on build timeout in `config.yaml` or pre-build the image |
+| Build fails | Check Logs tab for details | Ensure base image is Debian (not Alpine); verify `.deb`/`.whl` are in `packages/` |
 | Blank video in Lovelace | Ingress token wrong | Re-check the iframe URL / addon hostname |
 
 ### Useful Host Commands
