@@ -1,6 +1,9 @@
 ARG BUILD_FROM=debian:bookworm-slim
 FROM ${BUILD_FROM}
 
+# Use bash (Debian) — ensures apt-get works even if somehow Alpine sneaks in
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # ─── System dependencies ─────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
