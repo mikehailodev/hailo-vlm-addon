@@ -1,0 +1,34 @@
+name: "Hailo-10H VLM Chat"
+description: "Vision Language Model chat using Hailo-10H AI accelerator — capture images and ask questions with AI-powered visual understanding"
+version: "1.0.0"
+slug: "hailo_vlm"
+url: "https://github.com/mikehailodev/hailo-vlm-addon"
+arch:
+  - aarch64
+init: false
+startup: application
+boot: manual
+ingress: true
+ingress_port: 8099
+ingress_entry: /
+panel_icon: "mdi:eye"
+panel_title: "Hailo VLM"
+video: true
+full_access: true
+apparmor: false
+timeout: 300
+map:
+  - type: media
+    read_only: false
+options:
+  camera_device: "/dev/video0"
+  max_tokens: 200
+  temperature: 0.1
+  default_prompt: "Describe the image"
+  system_prompt: "You are a helpful assistant that analyzes images and answers questions about them."
+schema:
+  camera_device: str
+  max_tokens: "int(50,1000)"
+  temperature: "float(0.0,2.0)"
+  default_prompt: str
+  system_prompt: str

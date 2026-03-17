@@ -1,0 +1,16 @@
+configuration:
+  camera_device:
+    name: Camera Device
+    description: "Path to the video device (e.g. /dev/video0)"
+  max_tokens:
+    name: Max Tokens
+    description: "Maximum number of tokens the VLM generates per response"
+  temperature:
+    name: Temperature
+    description: "Sampling temperature (lower = more deterministic)"
+  default_prompt:
+    name: Default Prompt
+    description: "Default question when no prompt is entered"
+  system_prompt:
+    name: System Prompt
+    description: "System prompt sent to the VLM to guide its behavior"

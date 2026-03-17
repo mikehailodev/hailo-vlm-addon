@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hailo-10H VLM Chat</title>
+  <style>
+    :root {
+      --primary: #03a9f4;
+      --primary-dark: #0288d1;
+      --bg: #1c1c1c;
+      --card-bg: #2a2a2a;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --border: #444;
+      --success: #4caf50;
+      --warning: #ff9800;
+      --error: #f44336;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .status-dot.ok { background: var(--success); }
+    .status-dot.warn { background: var(--warning); }
+    .status-dot.err { background: var(--error); }
+
+    /* Video area */
+    .video-wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      aspect-ratio: 4 / 3;
+    }
+    .video-wrapper img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .video-overlay {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .video-overlay.live { color: var(--success); }
+    .video-overlay.captured { color: var(--warning); }
+    .video-overlay.processing { color: var(--primary); }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; filter: none; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warning { background: var(--warning); color: #000; }
+
+    /* Prompt area */
+    .prompt-area {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .prompt-area label { font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 6px; }
+    .prompt-row {
+      display: flex;
+      gap: 10px;
+    }
+    .prompt-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .prompt-row input:focus { border-color: var(--primary); }
+
+    /* Response area */
+    .response-area {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .response-area.visible { display: block; }
+    .response-area h3 { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
+    .response-text {
+      font-size: 1rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .response-meta {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Spinner */
+    .spinner {
+      display: none;
+      width: 24px; height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .spinner.visible { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Keyboard hint */
+    .hint {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      padding: 8px;
+    }
+    kbd {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: inherit;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span id="statusDot" class="status-dot warn"></span>
+      <h1>Hailo-10H VLM Chat</h1>
+    </header>
+
+    <!-- Video -->
+    <div class="video-wrapper">
+      <img id="videoStream" src="video_feed" alt="Video stream" />
+      <div id="overlay" class="video-overlay live">&#9679; LIVE</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="btnCapture" class="btn btn-warning" onclick="captureFrame()">
+        &#128247; Capture
+      </button>
+      <button id="btnResume" class="btn btn-success" onclick="resumeVideo()" disabled>
+        &#9654; Resume Video
+      </button>
+      <div id="spinner" class="spinner"></div>
+    </div>
+
+    <!-- Prompt -->
+    <div class="prompt-area">
+      <label for="promptInput">Ask a question about the captured image:</label>
+      <div class="prompt-row">
+        <input id="promptInput" type="text" placeholder="e.g. What objects do you see?"
+               disabled />
+        <button id="btnAsk" class="btn btn-primary" onclick="askQuestion()" disabled>
+          Ask
+        </button>
+      </div>
+    </div>
+
+    <!-- Response -->
+    <div id="responseArea" class="response-area">
+      <h3>&#129302; VLM Response</h3>
+      <div id="responseText" class="response-text"></div>
+      <div id="responseMeta" class="response-meta"></div>
+    </div>
+
+    <div class="hint">
+      Press <kbd>Enter</kbd> to capture &middot; Type question &middot; <kbd>Enter</kbd> to ask &middot; <kbd>Enter</kbd> to resume
+    </div>
+  </div>
+
+  <script>
+    // Determine base path (for HA ingress)
+    const basePath = (() => {
+      const path = window.location.pathname;
+      // In ingress mode the path is like /api/hassio_ingress/<token>/
+      const idx = path.indexOf("/", 1);
+      if (path.startsWith("/api/hassio_ingress")) {
+        const parts = path.split("/");
+        return "/" + parts.slice(1, 4).join("/");
+      }
+      return "";
+    })();
+
+    function apiUrl(endpoint) {
+      return basePath + endpoint;
+    }
+
+    // Fix video stream URL for ingress
+    document.getElementById("videoStream").src = apiUrl("/video_feed");
+
+    // State machine
+    const STATE = { LIVE: "LIVE", CAPTURED: "CAPTURED", PROCESSING: "PROCESSING", RESULT: "RESULT" };
+    let state = STATE.LIVE;
+
+    const btnCapture = document.getElementById("btnCapture");
+    const btnResume = document.getElementById("btnResume");
+    const btnAsk = document.getElementById("btnAsk");
+    const promptInput = document.getElementById("promptInput");
+    const overlay = document.getElementById("overlay");
+    const spinner = document.getElementById("spinner");
+    const responseArea = document.getElementById("responseArea");
+    const responseText = document.getElementById("responseText");
+    const responseMeta = document.getElementById("responseMeta");
+    const statusDot = document.getElementById("statusDot");
+
+    function setState(s) {
+      state = s;
+      btnCapture.disabled = s !== STATE.LIVE;
+      btnResume.disabled = s === STATE.LIVE || s === STATE.PROCESSING;
+      btnAsk.disabled = s !== STATE.CAPTURED && s !== STATE.RESULT;
+      promptInput.disabled = s !== STATE.CAPTURED && s !== STATE.RESULT;
+      spinner.classList.toggle("visible", s === STATE.PROCESSING);
+
+      if (s === STATE.LIVE) {
+        overlay.className = "video-overlay live";
+        overlay.innerHTML = "&#9679; LIVE";
+      } else if (s === STATE.CAPTURED) {
+        overlay.className = "video-overlay captured";
+        overlay.innerHTML = "&#128247; CAPTURED";
+        promptInput.focus();
+      } else if (s === STATE.PROCESSING) {
+        overlay.className = "video-overlay processing";
+        overlay.innerHTML = "&#9203; PROCESSING...";
+      } else if (s === STATE.RESULT) {
+        overlay.className = "video-overlay captured";
+        overlay.innerHTML = "&#9989; RESULT";
+      }
+    }
+
+    async function captureFrame() {
+      if (state !== STATE.LIVE) return;
+      try {
+        const res = await fetch(apiUrl("/api/capture"), { method: "POST" });
+        const data = await res.json();
+        if (data.ok) {
+          setState(STATE.CAPTURED);
+          responseArea.classList.remove("visible");
+        } else {
+          alert("Capture failed: " + (data.error || "unknown"));
+        }
+      } catch (e) {
+        alert("Capture error: " + e);
+      }
+    }
+
+    async function askQuestion() {
+      if (state !== STATE.CAPTURED && state !== STATE.RESULT) return;
+      const prompt = promptInput.value.trim();
+      setState(STATE.PROCESSING);
+      try {
+        const res = await fetch(apiUrl("/api/ask"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          responseText.textContent = data.answer;
+          responseMeta.textContent = "Inference time: " + data.time;
+          responseArea.classList.add("visible");
+          setState(STATE.RESULT);
+        } else {
+          responseText.textContent = "Error: " + (data.error || "unknown");
+          responseMeta.textContent = "";
+          responseArea.classList.add("visible");
+          setState(STATE.RESULT);
+        }
+      } catch (e) {
+        responseText.textContent = "Request failed: " + e;
+        responseMeta.textContent = "";
+        responseArea.classList.add("visible");
+        setState(STATE.RESULT);
+      }
+    }
+
+    async function resumeVideo() {
+      try {
+        await fetch(apiUrl("/api/resume"), { method: "POST" });
+      } catch (e) { /* ignore */ }
+      responseArea.classList.remove("visible");
+      promptInput.value = "";
+      setState(STATE.LIVE);
+    }
+
+    // Keyboard shortcuts (Enter cycles through states)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (state === STATE.LIVE) captureFrame();
+        else if (state === STATE.CAPTURED) askQuestion();
+        else if (state === STATE.RESULT) resumeVideo();
+      }
+    });
+
+    // Status polling
+    async function checkStatus() {
+      try {
+        const res = await fetch(apiUrl("/api/status"));
+        const data = await res.json();
+        if (data.hailo_device && data.camera_ok) {
+          statusDot.className = "status-dot ok";
+        } else if (data.camera_ok || data.hailo_device) {
+          statusDot.className = "status-dot warn";
+        } else {
+          statusDot.className = "status-dot err";
+        }
+      } catch (e) {
+        statusDot.className = "status-dot err";
+      }
+    }
+    checkStatus();
+    setInterval(checkStatus, 10000);
+
+    // Initial state
+    setState(STATE.LIVE);
+  </script>
+</body>
+</html>
