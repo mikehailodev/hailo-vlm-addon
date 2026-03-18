@@ -3,6 +3,7 @@
 FROM debian:bookworm-slim
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
 
 # ─── System dependencies ─────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-opencv \
     v4l-utils \
     jq \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Install HailoRT from pre-built packages ─────────────────────────────────
@@ -17,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # The .whl installs the hailo_platform Python bindings.
 COPY packages/ /tmp/packages/
 RUN apt-get update \
-    && dpkg -i /tmp/packages/h10-hailort_5.2.0_arm64.deb \
-    || (apt-get install -f -y && dpkg -i /tmp/packages/h10-hailort_5.2.0_arm64.deb) \
+    && dpkg -i /tmp/packages/h10-hailort_5.2.0_arm64.deb; \
+    apt-get install -f -y \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --break-system-packages --no-cache-dir \
@@ -37,4 +39,6 @@ RUN chmod a+x /opt/hailo_vlm/run.sh
 
 WORKDIR /opt/hailo_vlm
 
+# Use tini as init — reaps zombie processes from multiprocessing VLM backend
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/opt/hailo_vlm/run.sh"]
