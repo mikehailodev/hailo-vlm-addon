@@ -99,17 +99,7 @@ lspci -nn | grep 1e60
 3. Wait for the Docker image to build (first install takes a few minutes
    to install the bundled HailoRT packages)
 
-### 3. Disable Protection Mode (Required)
-
-The Hailo device uses a custom major number (511) that is not in any standard
-HA device group. The `full_access: true` flag only grants the cgroup wildcard
-rule when protection mode is off.
-
-1. Go to the add-on's **Info** tab
-2. Scroll down to **Protection mode** and toggle it **OFF**
-3. Confirm the warning
-
-### 4. Configure & Start
+### 3. Configure & Start
 
 1. Go to the add-on's **Configuration** tab
 2. Adjust options (camera device, model parameters)

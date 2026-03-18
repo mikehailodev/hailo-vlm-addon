@@ -1,6 +1,6 @@
 name: "Hailo-10H VLM Chat"
 description: "Vision Language Model chat using Hailo-10H AI accelerator — capture images and ask questions with AI-powered visual understanding"
-version: "1.0.4"
+version: "1.0.5"
 slug: "hailo_vlm"
 url: "https://github.com/mikehailodev/hailo-vlm-addon"
 arch:
@@ -13,6 +13,8 @@ ingress_port: 8099
 ingress_entry: /
 panel_icon: "mdi:eye"
 panel_title: "Hailo VLM"
+devices:
+  - "/dev/hailo0"
 video: true
 full_access: true
 privileged:
