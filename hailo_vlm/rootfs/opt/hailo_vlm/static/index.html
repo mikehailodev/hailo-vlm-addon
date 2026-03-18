@@ -185,9 +185,7 @@
 
     <!-- Video -->
     <div class="video-wrapper">
-      <img id="videoStream" src="" alt="Video stream" style="display:none;" />
-      <canvas id="videoCanvas" style="width:100%;height:100%;display:none;"></canvas>
-      <div id="placeholderText" style="color:#888;display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:1.1rem;">Loading video...</div>
+      <img id="videoFrame" src="" alt="" style="width:100%;height:100%;object-fit:contain;" />
       <div id="overlay" class="video-overlay live">&#9679; LIVE</div>
     </div>
 
@@ -244,61 +242,24 @@
     }
 
     // Fix video stream URL for ingress
-    const videoStream = document.getElementById("videoStream");
-    const videoCanvas = document.getElementById("videoCanvas");
-    const placeholderText = document.getElementById("placeholderText");
-    const ctx = videoCanvas.getContext("2d");
-    let usePolling = false;
-    let pollTimer = null;
+    const videoFrame = document.getElementById("videoFrame");
+    let polling = true;
 
-    // Try MJPEG stream first
-    videoStream.src = apiUrl("/video_feed");
-    videoStream.onload = function() {
-      // MJPEG loaded successfully
-      videoStream.style.display = "block";
-      videoCanvas.style.display = "none";
-      placeholderText.style.display = "none";
-    };
-    videoStream.onerror = function() {
-      // MJPEG failed (ingress may not support streaming) — fall back to polling
-      console.warn("MJPEG stream failed, falling back to frame polling");
-      videoStream.style.display = "none";
-      startFramePolling();
-    };
-    // If MJPEG loads a frame within 3s, great; otherwise switch to polling
-    setTimeout(() => {
-      if (videoStream.naturalWidth === 0 && !usePolling) {
-        console.warn("MJPEG stream timeout, falling back to frame polling");
-        videoStream.src = "";
-        videoStream.style.display = "none";
-        startFramePolling();
-      }
-    }, 3000);
-
-    function startFramePolling() {
-      usePolling = true;
-      videoCanvas.style.display = "block";
-      placeholderText.style.display = "none";
-      pollFrame();
-    }
-
+    // Simple JPEG polling — works reliably through HA ingress
     function pollFrame() {
-      if (!usePolling) return;
+      if (!polling) return;
       const img = new Image();
-      img.crossOrigin = "anonymous";
       img.onload = function() {
-        videoCanvas.width = img.width;
-        videoCanvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        // Poll at ~10fps
-        pollTimer = setTimeout(pollFrame, 100);
+        videoFrame.src = img.src;
+        // Next frame after this one renders
+        setTimeout(pollFrame, 100);
       };
       img.onerror = function() {
-        pollTimer = setTimeout(pollFrame, 1000);
+        setTimeout(pollFrame, 1000);
       };
-      // Add cache-buster to avoid stale frames
       img.src = apiUrl("/video_feed?snapshot=1&t=" + Date.now());
     }
+    pollFrame();
 
     // State machine
     const STATE = { LIVE: "LIVE", CAPTURED: "CAPTURED", PROCESSING: "PROCESSING", RESULT: "RESULT" };
@@ -345,6 +306,11 @@
         const res = await fetch(apiUrl("/api/capture"), { method: "POST" });
         const data = await res.json();
         if (data.ok) {
+          // Stop polling and show the captured frame
+          polling = false;
+          if (data.image) {
+            videoFrame.src = "data:image/jpeg;base64," + data.image;
+          }
           setState(STATE.CAPTURED);
           responseArea.classList.remove("visible");
         } else {
@@ -389,6 +355,9 @@
       try {
         await fetch(apiUrl("/api/resume"), { method: "POST" });
       } catch (e) { /* ignore */ }
+      // Restart frame polling
+      polling = true;
+      pollFrame();
       responseArea.classList.remove("visible");
       promptInput.value = "";
       setState(STATE.LIVE);
