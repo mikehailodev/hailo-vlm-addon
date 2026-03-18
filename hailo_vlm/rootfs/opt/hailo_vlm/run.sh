@@ -20,9 +20,28 @@ echo "Max tokens:    ${MAX_TOKENS}"
 echo "Temperature:   ${TEMPERATURE}"
 echo "=========================================="
 
+# --- Diagnostics ---
+echo ""
+echo "--- Container diagnostics ---"
+echo "Running as: $(id)"
+echo "Capabilities:"
+cat /proc/self/status | grep -i cap || echo "  (could not read capabilities)"
+echo ""
+echo "Device nodes:"
+ls -la /dev/hailo* 2>/dev/null || echo "  No /dev/hailo* devices found"
+ls -la /dev/video* 2>/dev/null || echo "  No /dev/video* devices found"
+echo ""
+
 # Check for Hailo device
 if [ -e /dev/hailo0 ]; then
     echo "✓ Hailo device found at /dev/hailo0"
+    # Test actual read access
+    if dd if=/dev/hailo0 bs=1 count=1 of=/dev/null 2>/dev/null; then
+        echo "✓ Hailo device is readable"
+    else
+        echo "✗ Hailo device exists but CANNOT be read (errno=$?)"
+        echo "  This usually means missing capabilities/privileges"
+    fi
 else
     echo "⚠ WARNING: No Hailo device found at /dev/hailo0"
     echo "  The add-on will start in demo mode without AI inference."
