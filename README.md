@@ -9,36 +9,36 @@
 ![Platform](https://img.shields.io/badge/platform-aarch64-green.svg)
 ![HA](https://img.shields.io/badge/Home%20Assistant-Add--on-41BDF5.svg)
 
+## Installing
+
+Click the button below to add this repository to your Home Assistant instance:
+
+[![Open your Home Assistant instance and show the add add-on repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmikehailodev%2Fhailo-vlm-addon)
+
+Or manually: go to **Settings** → **Add-ons** → **Add-on Store** → **⋮** → **Repositories** and add:
+```
+https://github.com/mikehailodev/hailo-vlm-addon
+```
+
+## Add-ons provided by this repository
+
+- **[Hailo-10H VLM Chat](hailo_vlm/)** — Capture camera images and ask an AI about them via a web UI embedded in HA
+
 ---
 
 ## Table of Contents
 
-1. [What's Included](#whats-included)
-2. [Prerequisites](#prerequisites)
-3. [Installation](#installation)
-4. [VLM Model Setup](#vlm-model-setup)
-5. [Add-on Configuration](#add-on-configuration)
-6. [Lovelace Dashboard Card](#lovelace-dashboard-card)
-7. [Automation Examples](#automation-examples)
-8. [REST Sensors & Commands](#rest-sensors--commands)
-9. [Building Your Own Hailo Add-on](#building-your-own-hailo-add-on)
-10. [Architecture Overview](#architecture-overview)
-11. [Troubleshooting](#troubleshooting)
-12. [Contributing](#contributing)
-
----
-
-## What's Included
-
-| Add-on | Description |
-|--------|-------------|
-| **[Hailo-10H VLM Chat](hailo_vlm/)** | Capture camera images and ask an AI about them via a web UI embedded in HA |
-
-The VLM Chat add-on demonstrates the full pipeline:
-camera → frame capture → VLM inference on Hailo-10H → natural-language answer.
-
-It is designed as a starting point — fork it, extend it, or use the patterns
-below to create your own Hailo-powered automations.
+1. [Prerequisites](#prerequisites)
+2. [Installation](#installation)
+3. [VLM Model Setup](#vlm-model-setup)
+4. [Add-on Configuration](#add-on-configuration)
+5. [Lovelace Dashboard Card](#lovelace-dashboard-card)
+6. [Automation Examples](#automation-examples)
+7. [REST Sensors & Commands](#rest-sensors--commands)
+8. [Building Your Own Hailo Add-on](#building-your-own-hailo-add-on)
+9. [Architecture Overview](#architecture-overview)
+10. [Troubleshooting](#troubleshooting)
+11. [Contributing](#contributing)
 
 ---
 
@@ -82,15 +82,9 @@ lspci -nn | grep 1e60
 
 ## Installation
 
-### 1. Add the Repository to Home Assistant
+### 1. Add the Repository
 
-1. Open Home Assistant → **Settings** → **Add-ons** → **Add-on Store**
-2. Click the **⋮** menu (top right) → **Repositories**
-3. Paste the repository URL:
-   ```
-   https://github.com/mikehailodev/hailo-vlm-addon
-   ```
-4. Click **Add** → **Close**
+Use the blue button at the top of this README, or add the URL manually (see [Installing](#installing)).
 
 ### 2. Install the Add-on
 
