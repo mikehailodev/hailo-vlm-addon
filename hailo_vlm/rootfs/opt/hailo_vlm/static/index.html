@@ -220,7 +220,7 @@
     </div>
 
     <div class="hint">
-      Press <kbd>Enter</kbd> to capture &middot; Type question &middot; <kbd>Enter</kbd> to ask &middot; <kbd>Enter</kbd> to resume
+      <kbd>Enter</kbd> to capture &middot; Type question + <kbd>Enter</kbd> to ask &middot; <kbd>Esc</kbd> to resume live
     </div>
   </div>
 
@@ -363,13 +363,25 @@
       setState(STATE.LIVE);
     }
 
-    // Keyboard shortcuts (Enter cycles through states)
+    // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
-        e.preventDefault();
-        if (state === STATE.LIVE) captureFrame();
-        else if (state === STATE.CAPTURED) askQuestion();
-        else if (state === STATE.RESULT) resumeVideo();
+        if (state === STATE.LIVE) {
+          e.preventDefault();
+          captureFrame();
+        } else if (state === STATE.CAPTURED || state === STATE.RESULT) {
+          // Only Ask if prompt input is focused (user typed something + pressed Enter)
+          if (document.activeElement === promptInput) {
+            e.preventDefault();
+            askQuestion();
+          }
+        }
+      } else if (e.key === "Escape") {
+        // Escape always goes back to live
+        if (state !== STATE.LIVE && state !== STATE.PROCESSING) {
+          e.preventDefault();
+          resumeVideo();
+        }
       }
     });
 

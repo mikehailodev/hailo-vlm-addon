@@ -3,11 +3,14 @@ VLM Backend for Hailo-10H.
 
 Wraps the Hailo VLM inference pipeline. Falls back to a demo mode
 when the Hailo device or hailo_platform is not available.
+
+Uses threading (not multiprocessing) to avoid fork-related issues
+with Hailo's C library and /dev/hailo0 device handles.
 """
 
 import time
 import logging
-import multiprocessing as mp
+import threading
 from typing import Optional
 
 import numpy as np
@@ -30,105 +33,10 @@ except ImportError as e:
 
 
 # ---------------------------------------------------------------------------
-# Worker process (runs VLM inference in a separate process)
-# ---------------------------------------------------------------------------
-def _vlm_worker(request_q: mp.Queue, response_q: mp.Queue,
-                hef_path: Optional[str], max_tokens: int,
-                temperature: float, seed: int) -> None:
-    """Long-running worker process that owns the Hailo VDevice."""
-    try:
-        if HAILO_AVAILABLE and hef_path:
-            params = VDevice.create_params()
-            vdevice = VDevice(params)
-            vlm = VLM(vdevice, hef_path)
-            logger.info("VLM model loaded in worker process")
-        else:
-            vlm = None
-            vdevice = None
-            logger.info("Worker running in demo mode (no Hailo device)")
-
-        while True:
-            item = request_q.get()
-            if item is None:
-                break
-
-            try:
-                result = _run_inference(
-                    item["image"], item["prompts"],
-                    vlm, max_tokens, temperature, seed
-                )
-                response_q.put({"result": result, "error": None})
-            except Exception as e:
-                logger.error(f"Inference error: {e}")
-                response_q.put({"result": None, "error": str(e)})
-
-    except Exception as e:
-        logger.error(f"Worker process error: {e}")
-        response_q.put({"result": None, "error": str(e)})
-    finally:
-        try:
-            if vlm:
-                vlm.release()
-            if vdevice:
-                vdevice.release()
-        except Exception:
-            pass
-
-
-def _run_inference(image: np.ndarray, prompts: dict,
-                   vlm, max_tokens: int, temperature: float,
-                   seed: int) -> dict:
-    """Execute a single inference (real or simulated)."""
-    start = time.time()
-
-    if vlm is None:
-        # Demo mode — simulate a response
-        time.sleep(1.5)
-        answer = (
-            "[DEMO MODE] This is a simulated response. "
-            "Install and configure HailoRT + a VLM HEF model to get "
-            "real AI-powered image analysis. The image appears to contain "
-            "various objects and visual elements."
-        )
-        return {"answer": answer, "time": f"{time.time() - start:.2f}s"}
-
-    prompt = [
-        {
-            "role": "system",
-            "content": [{"type": "text", "text": prompts["system_prompt"]}],
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "image"},
-                {"type": "text", "text": prompts["user_prompt"]},
-            ],
-        },
-    ]
-
-    response_text = ""
-    with vlm.generate(
-        prompt=prompt, frames=[image],
-        temperature=temperature, seed=seed,
-        max_generated_tokens=max_tokens,
-    ) as generation:
-        for chunk in generation:
-            if chunk != "<|im_end|>":
-                response_text += chunk
-
-    vlm.clear_context()
-    elapsed = time.time() - start
-    return {
-        "answer": response_text.replace("<|im_end|>", "").strip(),
-        "time": f"{elapsed:.2f}s",
-    }
-
-
-# ---------------------------------------------------------------------------
 # Public Backend class
 # ---------------------------------------------------------------------------
 class VLMBackend:
-    """Manages the VLM worker process and provides a simple inference API."""
+    """Manages the Hailo VLM and provides a thread-safe inference API."""
 
     def __init__(self, hef_path: Optional[str] = None,
                  max_tokens: int = 200, temperature: float = 0.1,
@@ -139,45 +47,120 @@ class VLMBackend:
         self.temperature = temperature
         self.seed = seed
         self.system_prompt = system_prompt
+        self._lock = threading.Lock()
+        self._vlm = None
+        self._vdevice = None
 
-        self._req_q: mp.Queue = mp.Queue(maxsize=2)
-        self._res_q: mp.Queue = mp.Queue(maxsize=2)
-        self._process = mp.Process(
-            target=_vlm_worker,
-            args=(self._req_q, self._res_q, hef_path,
-                  max_tokens, temperature, seed),
-            daemon=True,
-        )
-        self._process.start()
-        logger.info("VLM backend started")
+        # Initialise the Hailo device and model in the main thread
+        self._init_model()
+
+    def _init_model(self):
+        """Load the VLM model on the Hailo device."""
+        if not HAILO_AVAILABLE:
+            logger.info("Running in demo mode (hailo_platform not installed)")
+            return
+        if not self.hef_path:
+            logger.warning("No HEF path — running in demo mode")
+            return
+
+        try:
+            logger.info(f"Loading VLM model: {self.hef_path}")
+            params = VDevice.create_params()
+            self._vdevice = VDevice(params)
+            self._vlm = VLM(self._vdevice, self.hef_path)
+            logger.info("VLM model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load VLM model: {e}")
+            self._vlm = None
+            self._vdevice = None
 
     def infer(self, image: np.ndarray, user_prompt: str,
-              timeout: int = 60) -> dict:
-        """Send an image + prompt to the worker and return the result."""
-        # Resize / normalise image for the model (336×336 RGB)
+              timeout: int = 120) -> dict:
+        """Run VLM inference (thread-safe via lock)."""
         processed = self._prepare_image(image)
+        logger.info(f"Starting inference, image shape: {processed.shape}")
 
-        self._req_q.put({
-            "image": processed,
-            "prompts": {
-                "system_prompt": self.system_prompt,
-                "user_prompt": user_prompt,
-            },
-        })
-        try:
-            resp = self._res_q.get(timeout=timeout)
-            if resp["error"]:
-                return {"answer": f"Error: {resp['error']}", "time": "error"}
-            return resp["result"]
-        except Exception:
-            return {"answer": f"Timeout after {timeout}s", "time": f"{timeout}s+"}
+        # Run inference in a thread so we can enforce a timeout
+        result = [None]
+        error = [None]
+
+        def _do_inference():
+            try:
+                result[0] = self._run_inference(processed, user_prompt)
+            except Exception as e:
+                logger.error(f"Inference error: {e}", exc_info=True)
+                error[0] = str(e)
+
+        t = threading.Thread(target=_do_inference, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+
+        if t.is_alive():
+            logger.error(f"Inference timed out after {timeout}s")
+            return {"answer": f"Timeout after {timeout}s — the model may be stuck. Try restarting the add-on.", "time": f"{timeout}s+"}
+        if error[0]:
+            return {"answer": f"Error: {error[0]}", "time": "error"}
+        return result[0] or {"answer": "No response from model", "time": "error"}
+
+    def _run_inference(self, image: np.ndarray, user_prompt: str) -> dict:
+        """Execute a single inference (real or simulated)."""
+        start = time.time()
+
+        with self._lock:
+            if self._vlm is None:
+                # Demo mode
+                time.sleep(1.5)
+                answer = (
+                    "[DEMO MODE] This is a simulated response. "
+                    "Install and configure HailoRT + a VLM HEF model to get "
+                    "real AI-powered image analysis. The image appears to contain "
+                    "various objects and visual elements."
+                )
+                return {"answer": answer, "time": f"{time.time() - start:.2f}s"}
+
+            logger.info("Sending prompt to VLM...")
+            prompt = [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": self.system_prompt}],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": user_prompt},
+                    ],
+                },
+            ]
+
+            response_text = ""
+            try:
+                with self._vlm.generate(
+                    prompt=prompt, frames=[image],
+                    temperature=self.temperature, seed=self.seed,
+                    max_generated_tokens=self.max_tokens,
+                ) as generation:
+                    for chunk in generation:
+                        if chunk != "<|im_end|>":
+                            response_text += chunk
+                            logger.debug(f"Chunk: {chunk}")
+
+                self._vlm.clear_context()
+            except Exception as e:
+                logger.error(f"VLM generate error: {e}", exc_info=True)
+                return {"answer": f"VLM error: {e}", "time": f"{time.time() - start:.2f}s"}
+
+        elapsed = time.time() - start
+        answer = response_text.replace("<|im_end|>", "").strip()
+        logger.info(f"Inference complete in {elapsed:.2f}s, {len(answer)} chars")
+        return {"answer": answer, "time": f"{elapsed:.2f}s"}
 
     def close(self):
         try:
-            self._req_q.put(None)
-            self._process.join(timeout=3)
-            if self._process.is_alive():
-                self._process.terminate()
+            if self._vlm:
+                self._vlm.release()
+            if self._vdevice:
+                self._vdevice.release()
         except Exception:
             pass
 
