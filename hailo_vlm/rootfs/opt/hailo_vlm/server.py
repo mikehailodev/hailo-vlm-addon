@@ -15,6 +15,8 @@ import json
 import time
 import base64
 import logging
+import signal
+import sys
 import threading
 from pathlib import Path
 
@@ -228,6 +230,19 @@ def find_hef_path():
 
 
 if __name__ == "__main__":
+    # Graceful shutdown — release Hailo device on SIGTERM/SIGINT
+    def _shutdown(sig, frame):
+        logger.info(f"Received signal {sig}, shutting down...")
+        if backend:
+            backend.close()
+        if cap and cap.isOpened():
+            cap.release()
+        logger.info("Cleanup complete, exiting.")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
     open_camera()
 
     # Initialise VLM backend
