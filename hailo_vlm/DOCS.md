@@ -13,10 +13,13 @@
 ### Quick Start
 
 1. Install this add-on from the repository
-2. Configure the camera device path (default: `/dev/video0`)
-3. Place your VLM `.hef` model file in the HA `/media` or `/share` directory
-4. Start the add-on
-5. Open the Web UI from the sidebar
+2. **Disable Protection Mode** — go to the add-on's **Info** tab, scroll down,
+   and toggle **off** "Protection mode". This is required so `full_access: true`
+   can grant cgroup access to the Hailo device (major 511).
+3. Configure the camera device path (default: `/dev/video0`)
+4. Place your VLM `.hef` model file in the HA `/media` or `/share` directory
+5. Start the add-on
+6. Open the Web UI from the sidebar
 
 ### Using the VLM Chat
 
@@ -60,5 +63,8 @@ UI and integration without hardware.
 - **No camera**: Check that `video: true` is set and the correct device path
   is configured. Run `ls /dev/video*` on the host.
 - **No Hailo device**: Verify `lsmod | grep hailo` shows `hailo1x_pci` on the host.
+- **EPERM / Operation not permitted on /dev/hailo0**: Make sure **Protection Mode
+  is OFF** in the add-on's Info tab. The HA supervisor only grants cgroup device
+  access (`a *:* rwm`) when both `full_access: true` AND protection mode is disabled.
 - **Slow responses**: VLM inference on Hailo-10H typically takes 5-30 seconds
   depending on the model and prompt complexity.
