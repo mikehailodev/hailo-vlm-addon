@@ -130,6 +130,21 @@ def index():
 
 @app.route("/video_feed")
 def video_feed():
+    # If ?snapshot=1, return a single JPEG frame (for polling fallback)
+    if request.args.get("snapshot"):
+        with state_lock:
+            frozen = is_frozen
+            ff = frozen_frame
+        if frozen and ff is not None:
+            frame = ff
+        else:
+            frame = read_frame()
+            if frame is None:
+                frame = generate_placeholder()
+        _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        return Response(jpeg.tobytes(), mimetype="image/jpeg",
+                        headers={"Cache-Control": "no-cache, no-store"})
+    # Otherwise return MJPEG stream
     return Response(mjpeg_stream(),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
