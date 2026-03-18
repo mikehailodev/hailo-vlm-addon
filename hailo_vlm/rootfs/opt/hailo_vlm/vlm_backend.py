@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Try importing hailo_platform – graceful fallback if not available
 # ---------------------------------------------------------------------------
 HAILO_AVAILABLE = False
+SHARED_VDEVICE_GROUP_ID = "hailo_vlm_shared"
 try:
     from hailo_platform import VDevice
     from hailo_platform.genai import VLM
@@ -66,6 +67,7 @@ class VLMBackend:
         try:
             logger.info(f"Loading VLM model: {self.hef_path}")
             params = VDevice.create_params()
+            params.group_id = SHARED_VDEVICE_GROUP_ID
             self._vdevice = VDevice(params)
             self._vlm = VLM(self._vdevice, self.hef_path)
             logger.info("VLM model loaded successfully")
