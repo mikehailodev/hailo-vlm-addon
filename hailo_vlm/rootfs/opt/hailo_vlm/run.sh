@@ -35,12 +35,12 @@ echo ""
 # Check for Hailo device
 if [ -e /dev/hailo0 ]; then
     echo "✓ Hailo device found at /dev/hailo0"
-    # Test actual read access
-    if dd if=/dev/hailo0 bs=1 count=1 of=/dev/null 2>/dev/null; then
-        echo "✓ Hailo device is readable"
+    # Test open() access (Hailo driver uses ioctl, not read, so dd won't work)
+    if python3 -c "open('/dev/hailo0','rb').close()" 2>/dev/null; then
+        echo "✓ Hailo device is accessible"
     else
-        echo "✗ Hailo device exists but CANNOT be read (errno=$?)"
-        echo "  This usually means missing capabilities/privileges"
+        echo "✗ Hailo device exists but CANNOT be opened (EPERM)"
+        echo "  Disable Protection Mode in the add-on Info tab and restart"
     fi
 else
     echo "⚠ WARNING: No Hailo device found at /dev/hailo0"
