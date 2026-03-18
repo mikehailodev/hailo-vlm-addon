@@ -67,7 +67,10 @@ class VLMBackend:
         try:
             logger.info(f"Loading VLM model: {self.hef_path}")
             params = VDevice.create_params()
-            params.group_id = SHARED_VDEVICE_GROUP_ID
+            try:
+                params.group_id = SHARED_VDEVICE_GROUP_ID
+            except Exception:
+                logger.info("group_id not supported in this HailoRT version")
             self._vdevice = VDevice(params)
             self._vlm = VLM(self._vdevice, self.hef_path)
             logger.info("VLM model loaded successfully")
